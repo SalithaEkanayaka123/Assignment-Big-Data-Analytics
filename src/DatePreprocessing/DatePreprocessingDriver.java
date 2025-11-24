@@ -2,22 +2,21 @@ package DatePreprocessing;
 
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.Path;
+import org.apache.hadoop.io.NullWritable;
 import org.apache.hadoop.io.Text;
 import org.apache.hadoop.mapreduce.Job;
 import org.apache.hadoop.mapreduce.lib.input.FileInputFormat;
 import org.apache.hadoop.mapreduce.lib.output.FileOutputFormat;
 
 public class DatePreprocessingDriver {
-
     public static void main(String[] args) throws Exception {
-
         if (args.length != 2) {
-            System.err.println("Usage: DatePreprocessing.DatePreprocessingDriver <input path> <output path>");
+            System.err.println("Usage: DatePreprocessingDriver <input path> <output path>");
             System.exit(-1);
         }
 
         Configuration conf = new Configuration();
-        Job job = Job.getInstance(conf, "Date Preprocessing Job");
+        Job job = Job.getInstance(conf, "Standardize Weather Dates");
 
         job.setJarByClass(DatePreprocessingDriver.class);
         job.setMapperClass(DatePreprocessingMapper.class);
@@ -25,8 +24,7 @@ public class DatePreprocessingDriver {
 
         job.setMapOutputKeyClass(Text.class);
         job.setMapOutputValueClass(Text.class);
-
-        job.setOutputKeyClass(Text.class);
+        job.setOutputKeyClass(NullWritable.class);
         job.setOutputValueClass(Text.class);
 
         FileInputFormat.addInputPath(job, new Path(args[0]));
