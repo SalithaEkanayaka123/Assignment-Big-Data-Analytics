@@ -16,7 +16,7 @@ public class DatePreprocessingDriver {
         }
 
         Configuration conf = new Configuration();
-        Job job = Job.getInstance(conf, "Standardize Weather Dates");
+        Job job = Job.getInstance(conf, "Date Normalization");
 
         job.setJarByClass(DatePreprocessingDriver.class);
         job.setMapperClass(DatePreprocessingMapper.class);
@@ -24,6 +24,7 @@ public class DatePreprocessingDriver {
 
         job.setMapOutputKeyClass(Text.class);
         job.setMapOutputValueClass(Text.class);
+
         job.setOutputKeyClass(NullWritable.class);
         job.setOutputValueClass(Text.class);
 
