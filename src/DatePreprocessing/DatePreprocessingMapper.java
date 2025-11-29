@@ -52,7 +52,7 @@ public class DatePreprocessingMapper extends Mapper<LongWritable, Text, LongWrit
     }
 
     private String parseDate(String input) throws Exception {
-        SimpleDateFormat outputFormat = new SimpleDateFormat("yyyy-MM-dd");
+        SimpleDateFormat outputFormat = new SimpleDateFormat("dd-MM-yyyy");
         String[] formats = {
                 "d/M/yyyy", "M/d/yyyy", "dd/MM/yyyy", "MM/dd/yyyy",
                 "yyyy-MM-dd", "yyyy/MM/dd"

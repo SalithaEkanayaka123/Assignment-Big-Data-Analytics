@@ -66,13 +66,13 @@ public class DistrictMonthlyStatsMapper extends Mapper<LongWritable, Text, Text,
             String tempStr = fields[2].trim();
             String precipStr = fields[3].trim();
 
-            // Parse date to extract year and month
+            // Parse date to extract year and month (format: dd-MM-yyyy)
             String[] dateParts = date.split("-");
             if (dateParts.length != 3) {
                 return;
             }
 
-            String year = dateParts[0];
+            String year = dateParts[2];
             String month = dateParts[1];
 
             // Get district name from location map
