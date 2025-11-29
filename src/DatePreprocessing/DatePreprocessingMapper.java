@@ -6,9 +6,11 @@ import org.apache.hadoop.mapreduce.Mapper;
 import java.io.IOException;
 import java.text.SimpleDateFormat;
 import java.util.Date;
+import java.util.logging.Logger;
 
 public class DatePreprocessingMapper extends Mapper<LongWritable, Text, LongWritable, Text> {
 
+    private static final Logger LOGGER = Logger.getLogger(DatePreprocessingMapper.class.getName());
     private final LongWritable outKey = new LongWritable();
     private final Text outValue = new Text();
 
@@ -20,42 +22,45 @@ public class DatePreprocessingMapper extends Mapper<LongWritable, Text, LongWrit
         }
 
         if (key.get() == 0 && line.toLowerCase().startsWith("location_id")) {
-            outKey.set(Long.MIN_VALUE); // ensure header sorts before any real offset
+            outKey.set(Long.MIN_VALUE);
             outValue.set(line);
             context.write(outKey, outValue);
-            return; // don't attempt to parse header as data
+            LOGGER.info("Header line detected and written: " + line);
+            return;
         }
 
-        // Skip other header-like lines that accidentally appear in later splits
         if (line.toLowerCase().startsWith("location_id")) {
-            // ignore (since header has been emitted by offset 0)
+            LOGGER.info("Skipping duplicate header at offset " + key.get());
             return;
         }
 
         String[] parts = line.split(",", -1);
+
+        if (key.get() < 500) {
+            LOGGER.info("Line structure at offset " + key.get() + ": Total columns=" + parts.length +
+                    ", Column[0]=" + (parts.length > 0 ? parts[0] : "N/A") +
+                    ", Column[1]=" + (parts.length > 1 ? parts[1] : "N/A") +
+                    ", Column[2]=" + (parts.length > 2 ? parts[2] : "N/A"));
+        }
+
         if (parts.length < 2) {
-            // invalid row — skip
+            LOGGER.warning("Skipping line with insufficient columns at offset " + key.get() + ": " + line);
             return;
         }
 
         try {
-            // The date is in the second column (index 1)
             String originalDate = parts[1].trim();
             if (!originalDate.isEmpty() && !originalDate.equalsIgnoreCase("date")) {
                 String standardizedDate = parseDate(originalDate);
                 parts[1] = standardizedDate;
-                // Debug: print first few conversions
-                if (key.get() < 1000) {
-                    System.out.println("DEBUG: Converted '" + originalDate + "' to '" + standardizedDate + "'");
-                }
+                LOGGER.info("Date converted: '" + originalDate + "' -> '" + standardizedDate + "' at offset " + key.get());
             }
             outKey.set(key.get());
             outValue.set(String.join(",", parts));
             context.write(outKey, outValue);
         } catch (Exception e) {
-            // Could not parse date — emit original line to preserve data
-            System.err.println("WARNING: Could not parse date '" + parts[1] + "' at line offset " + key.get() + " - Error: " + e.getMessage());
-            System.err.println("  Full line: " + line);
+            LOGGER.severe("ERROR: Could not parse date '" + parts[1] + "' at line offset " + key.get() + " - " + e.getMessage());
+            LOGGER.severe("  Full line: " + line);
             outKey.set(key.get());
             outValue.set(line);
             context.write(outKey, outValue);
@@ -64,31 +69,28 @@ public class DatePreprocessingMapper extends Mapper<LongWritable, Text, LongWrit
 
     private String parseDate(String input) throws Exception {
         SimpleDateFormat outputFormat = new SimpleDateFormat("dd-MM-yyyy");
-        // Try formats in order: exact matches first, then flexible formats
         String[] formats = {
-                "dd-MM-yyyy",   // Already correct format
-                "d-M-yyyy",     // Single digit with dash
-                "yyyy-MM-dd",   // ISO format
-                "dd/MM/yyyy",   // Double digit with slash
-                "d/M/yyyy",     // Single digit with slash (1/1/2010)
-                "M/d/yyyy",     // US format with slash (1/12/2010)
-                "dd-M-yyyy",    // Mixed: double day, single month with dash
-                "d-MM-yyyy",    // Mixed: single day, double month with dash
-                "MM/dd/yyyy",   // US format double digit
-                "yyyy/MM/dd",   // ISO with slash
-                "d/MM/yyyy",    // Single day, double month with slash
-                "dd/M/yyyy"     // Double day, single month with slash
+                "dd-MM-yyyy",
+                "d-M-yyyy",
+                "yyyy-MM-dd",
+                "dd/MM/yyyy",
+                "d/M/yyyy",
+                "M/d/yyyy",
+                "dd-M-yyyy",
+                "d-MM-yyyy",
+                "MM/dd/yyyy",
+                "yyyy/MM/dd",
+                "d/MM/yyyy",
+                "dd/M/yyyy"
         };
-        
+
         for (String format : formats) {
             try {
                 SimpleDateFormat sdf = new SimpleDateFormat(format);
                 sdf.setLenient(false);
                 Date date = sdf.parse(input);
                 return outputFormat.format(date);
-            } catch (Exception ignored) {
-                // try next format
-            }
+            } catch (Exception ignored) { }
         }
         throw new Exception("Unparseable date: " + input);
     }
