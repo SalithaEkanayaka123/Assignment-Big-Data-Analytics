@@ -40,14 +40,19 @@ public class DatePreprocessingMapper extends Mapper<LongWritable, Text, LongWrit
 
         try {
             String originalDate = parts[1].trim();
-            String standardizedDate = parseDate(originalDate);
-            parts[1] = standardizedDate;
+            if (!originalDate.isEmpty()) {
+                String standardizedDate = parseDate(originalDate);
+                parts[1] = standardizedDate;
+            }
             outKey.set(key.get()); // file offset: preserves original line order when sorted
             outValue.set(String.join(",", parts));
             context.write(outKey, outValue);
         } catch (Exception e) {
-            // Could not parse date — skip or optionally emit original line
-            // For now skip unparseable lines to match earlier behavior
+            // Could not parse date — emit original line to preserve data
+            System.err.println("Warning: Could not parse date '" + parts[1] + "' in line: " + line + " - Error: " + e.getMessage());
+            outKey.set(key.get());
+            outValue.set(line); // Output original line unchanged
+            context.write(outKey, outValue);
         }
     }
 
@@ -60,9 +65,9 @@ public class DatePreprocessingMapper extends Mapper<LongWritable, Text, LongWrit
                 "yyyy-MM-dd",   // ISO format
                 "dd/MM/yyyy",   // Double digit with slash
                 "d/M/yyyy",     // Single digit with slash (1/1/2010)
+                "M/d/yyyy",     // US format with slash (1/12/2010)
                 "dd-M-yyyy",    // Mixed: double day, single month with dash
                 "d-MM-yyyy",    // Mixed: single day, double month with dash
-                "M/d/yyyy",     // US format with slash (ambiguous)
                 "MM/dd/yyyy",   // US format double digit
                 "yyyy/MM/dd",   // ISO with slash
                 "d/MM/yyyy",    // Single day, double month with slash
@@ -74,10 +79,7 @@ public class DatePreprocessingMapper extends Mapper<LongWritable, Text, LongWrit
                 SimpleDateFormat sdf = new SimpleDateFormat(format);
                 sdf.setLenient(false);
                 Date date = sdf.parse(input);
-                // Verify that the entire string was parsed
-                if (sdf.format(date).length() > 0) {
-                    return outputFormat.format(date);
-                }
+                return outputFormat.format(date);
             } catch (Exception ignored) {
                 // try next format
             }
