@@ -103,19 +103,19 @@ public class DistrictMonthlyStatsMapper extends Mapper<LongWritable, Text, Text,
             String tempStr = fields[5].trim();         // temperature_2m_mean (°C)
             String precipStr = fields[11].trim();      // precipitation_sum (mm)
 
-            // Parse date (format: dd/MM/yyyy or MM/dd/yyyy)
-            String[] dateParts = date.split("/");
+            // Parse date (format: dd-MM-yyyy)
+            String[] dateParts = date.split("-");
             if (dateParts.length != 3) {
                 skippedLines++;
                 if (skippedLines <= 5) {
-                    System.err.println("SKIPPED - Invalid date: " + date);
+                    System.err.println("SKIPPED - Invalid date format: " + date);
                 }
                 return;
             }
 
-            // Assuming MM/dd/yyyy format (01/01/2010)
-            String month = dateParts[0];
-            String day = dateParts[1];
+            // Format is dd-MM-yyyy
+            String day = dateParts[0];
+            String month = dateParts[1];
             String year = dateParts[2];
 
             // Get district name
