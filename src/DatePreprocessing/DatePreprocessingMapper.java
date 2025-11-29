@@ -5,6 +5,7 @@ import org.apache.hadoop.io.Text;
 import org.apache.hadoop.mapreduce.Mapper;
 import java.io.IOException;
 import java.text.SimpleDateFormat;
+import java.util.Arrays;
 import java.util.Date;
 import java.util.logging.Logger;
 
@@ -53,9 +54,9 @@ public class DatePreprocessingMapper extends Mapper<LongWritable, Text, LongWrit
             if (!originalDate.isEmpty() && !originalDate.equalsIgnoreCase("date")) {
                 String standardizedDate = parseDate(originalDate);
                 parts[1] = standardizedDate;
-                LOGGER.info("Date converted: '" + originalDate + "' -> '" + standardizedDate + "' at offset " + key.get());
             }
             outKey.set(key.get());
+            LOGGER.info("Date converted: '" + originalDate + "' -> '" + Arrays.toString(parts) + "' at offset " + key.get());
             outValue.set(String.join(",", parts));
             context.write(outKey, outValue);
         } catch (Exception e) {
@@ -68,21 +69,20 @@ public class DatePreprocessingMapper extends Mapper<LongWritable, Text, LongWrit
     }
 
     private String parseDate(String input) throws Exception {
-        SimpleDateFormat outputFormat = new SimpleDateFormat("MM/dd/yyyy");
+        SimpleDateFormat outputFormat = new SimpleDateFormat("dd-MM-yyyy");
         String[] formats = {
-                "dd-MM-yyyy",
-                "d-M-yyyy",
-                "yyyy-MM-dd",
-                "dd/MM/yyyy",
-                "d/M/yyyy",
-                "M/d/yyyy",
-                "dd-M-yyyy",
+                "dd-MM-yyyy",   // Already in correct format
+                "d-M-yyyy",     // Single digit with dash
+                "yyyy-MM-dd",   // ISO format
+                "M/d/yyyy",     // PRIMARY: mm/dd/yyyy format (1/1/2010, 12/31/2010)
+                "MM/dd/yyyy",   // Double digit mm/dd/yyyy
+                "d/M/yyyy",     // Single digit dd/mm/yyyy (fallback)
+                "dd/MM/yyyy",   // Double digit dd/mm/yyyy (fallback)
+                "dd-M-yyyy",    // Mixed dash formats
                 "d-MM-yyyy",
-                "MM/dd/yyyy",
                 "yyyy/MM/dd",
                 "d/MM/yyyy",
-                "dd/M/yyyy",
-                "mm/dd/yyyy"
+                "dd/M/yyyy"
         };
 
         for (String format : formats) {
