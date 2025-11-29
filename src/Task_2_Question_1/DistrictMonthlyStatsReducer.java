@@ -6,6 +6,7 @@ import java.io.IOException;
 
 public class DistrictMonthlyStatsReducer extends Reducer<Text, Text, Text, Text> {
 
+    private Text outputKey = new Text();
     private Text outputValue = new Text();
     private int keysProcessed = 0;
 
@@ -13,7 +14,9 @@ public class DistrictMonthlyStatsReducer extends Reducer<Text, Text, Text, Text>
     protected void reduce(Text key, Iterable<Text> values, Context context)
             throws IOException, InterruptedException {
 
-        System.err.println("=== REDUCER processing key: " + key.toString() + " ===");
+        if (keysProcessed < 5) {
+            System.err.println("=== REDUCER processing key: " + key.toString() + " ===");
+        }
 
         double tempSum = 0.0;
         double precipSum = 0.0;
@@ -21,8 +24,9 @@ public class DistrictMonthlyStatsReducer extends Reducer<Text, Text, Text, Text>
 
         for (Text value : values) {
             String[] parts = value.toString().split(",");
-            if (keysProcessed < 3) {
-                System.err.println("  Processing value: " + value.toString());
+
+            if (keysProcessed < 3 && count < 3) {
+                System.err.println("  Value " + count + ": " + value.toString());
             }
 
             if (parts.length == 2) {
@@ -49,15 +53,18 @@ public class DistrictMonthlyStatsReducer extends Reducer<Text, Text, Text, Text>
                 String year = keyParts[1];
                 String month = keyParts[2];
 
-                String output = String.format("%.2f,%.2f", precipSum, meanTemp);
+                // Create human-readable output as required
+                String output = String.format("%s had a total precipitation of %.2f mm with a mean temperature of %.2f°C for month %s in year %s",
+                        district, precipSum, meanTemp, month, year);
+
+                // Use the original key (District-Year-Month) as output key
                 outputValue.set(output);
 
-                if (keysProcessed < 3) {
-                    System.err.println("  EMITTING - Key: " + key + ", Value: " + output);
-                    System.err.println("  (Count: " + count + ", TempSum: " + tempSum + ", PrecipSum: " + precipSum + ")");
+                if (keysProcessed < 5) {
+                    System.err.println("  Writing output: " + output);
                 }
 
-                context.write(key, outputValue);
+                context.write(new Text(""), outputValue);  // Empty key for cleaner output
                 keysProcessed++;
             }
         }
