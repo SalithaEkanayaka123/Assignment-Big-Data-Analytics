@@ -6,7 +6,6 @@ import java.io.IOException;
 
 public class DistrictMonthlyStatsReducer extends Reducer<Text, Text, Text, Text> {
 
-    private Text outputKey = new Text();
     private Text outputValue = new Text();
     private int keysProcessed = 0;
 
