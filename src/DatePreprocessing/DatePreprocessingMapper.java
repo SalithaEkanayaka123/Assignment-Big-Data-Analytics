@@ -39,19 +39,25 @@ public class DatePreprocessingMapper extends Mapper<LongWritable, Text, LongWrit
         }
 
         try {
+            // The date is in the second column (index 1)
             String originalDate = parts[1].trim();
-            if (!originalDate.isEmpty()) {
+            if (!originalDate.isEmpty() && !originalDate.equalsIgnoreCase("date")) {
                 String standardizedDate = parseDate(originalDate);
                 parts[1] = standardizedDate;
+                // Debug: print first few conversions
+                if (key.get() < 1000) {
+                    System.out.println("DEBUG: Converted '" + originalDate + "' to '" + standardizedDate + "'");
+                }
             }
-            outKey.set(key.get()); // file offset: preserves original line order when sorted
+            outKey.set(key.get());
             outValue.set(String.join(",", parts));
             context.write(outKey, outValue);
         } catch (Exception e) {
             // Could not parse date — emit original line to preserve data
-            System.err.println("Warning: Could not parse date '" + parts[1] + "' in line: " + line + " - Error: " + e.getMessage());
+            System.err.println("WARNING: Could not parse date '" + parts[1] + "' at line offset " + key.get() + " - Error: " + e.getMessage());
+            System.err.println("  Full line: " + line);
             outKey.set(key.get());
-            outValue.set(line); // Output original line unchanged
+            outValue.set(line);
             context.write(outKey, outValue);
         }
     }
