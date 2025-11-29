@@ -1,10 +1,14 @@
+package Task_2_Question_1;
 
 import org.apache.hadoop.io.LongWritable;
 import org.apache.hadoop.io.Text;
 import org.apache.hadoop.mapreduce.Mapper;
+import java.io.BufferedReader;
+import java.io.FileReader;
 import java.io.IOException;
 import java.util.HashMap;
 import java.util.Map;
+import java.io.File;
 
 public class DistrictMonthlyStatsMapper extends Mapper<LongWritable, Text, Text, Text> {
 
@@ -14,14 +18,15 @@ public class DistrictMonthlyStatsMapper extends Mapper<LongWritable, Text, Text,
 
     @Override
     protected void setup(Context context) throws IOException, InterruptedException {
-        // Load location data from distributed cache
-        // Assuming location.csv is added to distributed cache
         try {
             java.net.URI[] cacheFiles = context.getCacheFiles();
             if (cacheFiles != null && cacheFiles.length > 0) {
+                // Get the actual file path
+                File locationFile = new File(cacheFiles[0].getPath());
+                String fileName = locationFile.getName();
+
+                BufferedReader reader = new BufferedReader(new FileReader(fileName));
                 String line;
-                java.io.BufferedReader reader = new java.io.BufferedReader(
-                        new java.io.FileReader(cacheFiles[0].getPath()));
 
                 // Skip header
                 reader.readLine();
@@ -38,6 +43,7 @@ public class DistrictMonthlyStatsMapper extends Mapper<LongWritable, Text, Text,
             }
         } catch (Exception e) {
             System.err.println("Error loading location data: " + e.getMessage());
+            e.printStackTrace();
         }
     }
 
@@ -54,8 +60,6 @@ public class DistrictMonthlyStatsMapper extends Mapper<LongWritable, Text, Text,
 
         String[] fields = line.split(",");
 
-        // Expected format: date,city_id,temperature_2m_mean,precipitation_sum,...
-        // Adjust indices based on your actual CSV structure
         if (fields.length < 4) {
             return;
         }
@@ -66,28 +70,25 @@ public class DistrictMonthlyStatsMapper extends Mapper<LongWritable, Text, Text,
             String tempStr = fields[2].trim();
             String precipStr = fields[3].trim();
 
-            // Parse date to extract year and month (format: dd-MM-yyyy)
-            String[] dateParts = date.split("-");
+            // Parse date (format: MM/dd/yyyy)
+            String[] dateParts = date.split("/");
             if (dateParts.length != 3) {
                 return;
             }
 
-            String year = dateParts[2];
-            String month = dateParts[1];
+            String month = dateParts[0];  // Month is first
+            String year = dateParts[2];   // Year is third
 
             // Get district name from location map
             String district = locationMap.getOrDefault(cityId, "Unknown");
 
-            // Skip if we couldn't find the district
             if (district.equals("Unknown")) {
                 return;
             }
 
-            // Parse numerical values
             double temperature = parseDouble(tempStr);
             double precipitation = parseDouble(precipStr);
 
-            // Skip if values are invalid
             if (Double.isNaN(temperature) || Double.isNaN(precipitation)) {
                 return;
             }

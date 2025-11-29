@@ -1,3 +1,4 @@
+package Task_2_Question_1;
 
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.Path;
@@ -12,7 +13,7 @@ public class DistrictMonthlyStatsDriver {
     public static void main(String[] args) throws Exception {
 
         if (args.length != 3) {
-            System.err.println("Usage: DistrictMonthlyStatsDriver <weather data path> <location file path> <output path>");
+            System.err.println("Usage: Task_2_Question_1.DistrictMonthlyStatsDriver <weather data path> <location file path> <output path>");
             System.exit(-1);
         }
 
