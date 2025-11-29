@@ -16,21 +16,17 @@ public class DistrictMonthlyStatsMapper extends Mapper<LongWritable, Text, Text,
     private Map<String, String> locationMap = new HashMap<>();
     private int processedLines = 0;
     private int skippedLines = 0;
+    private boolean headerSkipped = false;
 
     @Override
     protected void setup(Context context) throws IOException, InterruptedException {
         System.err.println("=== MAPPER SETUP STARTED ===");
         try {
             java.net.URI[] cacheFiles = context.getCacheFiles();
-            System.err.println("Cache files count: " + (cacheFiles != null ? cacheFiles.length : 0));
 
             if (cacheFiles != null && cacheFiles.length > 0) {
-                System.err.println("Cache file URI: " + cacheFiles[0].toString());
-
-                // Try different approaches to read the file
                 String path = cacheFiles[0].getPath();
                 String fileName = new java.io.File(path).getName();
-                System.err.println("File name: " + fileName);
 
                 BufferedReader reader = new BufferedReader(new FileReader(fileName));
                 String line;
@@ -42,20 +38,19 @@ public class DistrictMonthlyStatsMapper extends Mapper<LongWritable, Text, Text,
                 int locationCount = 0;
                 while ((line = reader.readLine()) != null) {
                     String[] fields = line.split(",");
-                    if (fields.length >= 2) {
-                        String cityId = fields[0].trim();
-                        String cityName = fields[1].trim();
-                        locationMap.put(cityId, cityName);
+                    // location_id is at index 0, city_name is at index 7
+                    if (fields.length >= 8) {
+                        String locationId = fields[0].trim();
+                        String cityName = fields[7].trim();
+                        locationMap.put(locationId, cityName);
                         locationCount++;
                         if (locationCount <= 5) {
-                            System.err.println("Loaded location: " + cityId + " -> " + cityName);
+                            System.err.println("Loaded: " + locationId + " -> " + cityName);
                         }
                     }
                 }
                 reader.close();
                 System.err.println("Total locations loaded: " + locationCount);
-            } else {
-                System.err.println("ERROR: No cache files found!");
             }
         } catch (Exception e) {
             System.err.println("ERROR in setup: " + e.getMessage());
@@ -70,75 +65,71 @@ public class DistrictMonthlyStatsMapper extends Mapper<LongWritable, Text, Text,
 
         String line = value.toString().trim();
 
-        // Skip empty lines
         if (line.isEmpty()) {
             return;
         }
 
-        // Skip header
-        if (line.startsWith("date") || line.toLowerCase().startsWith("date")) {
-            System.err.println("Skipping header: " + line);
+        // Skip header line (first line)
+        if (!headerSkipped) {
+            System.err.println("Skipping header: " + line.substring(0, Math.min(100, line.length())));
+            headerSkipped = true;
             return;
         }
 
         String[] fields = line.split(",");
 
-        // Debug: Print first few lines
-        if (processedLines < 5) {
-            System.err.println("Processing line " + processedLines + ": " + line);
-            System.err.println("Fields count: " + fields.length);
-            for (int i = 0; i < Math.min(fields.length, 5); i++) {
-                System.err.println("  Field[" + i + "]: '" + fields[i] + "'");
-            }
+        if (processedLines < 3) {
+            System.err.println("=== Line " + processedLines + " ===");
+            System.err.println("Total fields: " + fields.length);
+            if (fields.length > 0) System.err.println("Field[0] (location_id): " + fields[0]);
+            if (fields.length > 1) System.err.println("Field[1] (date): " + fields[1]);
+            if (fields.length > 5) System.err.println("Field[5] (temp_mean): " + fields[5]);
+            if (fields.length > 11) System.err.println("Field[11] (precip_sum): " + fields[11]);
         }
 
-        if (fields.length < 4) {
+        // Need at least 12 fields (0-11)
+        if (fields.length < 12) {
             skippedLines++;
             if (skippedLines <= 5) {
-                System.err.println("SKIPPED - Not enough fields: " + line);
+                System.err.println("SKIPPED - Not enough fields: " + fields.length);
             }
             return;
         }
 
         try {
-            String date = fields[0].trim();
-            String cityId = fields[1].trim();
-            String tempStr = fields[2].trim();
-            String precipStr = fields[3].trim();
+            // Field indices based on your CSV structure
+            String locationId = fields[0].trim();      // location_id
+            String date = fields[1].trim();            // date
+            String tempStr = fields[5].trim();         // temperature_2m_mean (°C)
+            String precipStr = fields[11].trim();      // precipitation_sum (mm)
 
-            if (processedLines < 5) {
-                System.err.println("Parsed - Date: " + date + ", CityID: " + cityId +
-                        ", Temp: " + tempStr + ", Precip: " + precipStr);
-            }
-
-            // Parse date (format: MM/dd/yyyy)
+            // Parse date (format: dd/MM/yyyy or MM/dd/yyyy)
             String[] dateParts = date.split("/");
             if (dateParts.length != 3) {
                 skippedLines++;
                 if (skippedLines <= 5) {
-                    System.err.println("SKIPPED - Invalid date format: " + date);
+                    System.err.println("SKIPPED - Invalid date: " + date);
                 }
                 return;
             }
 
+            // Assuming MM/dd/yyyy format (01/01/2010)
             String month = dateParts[0];
+            String day = dateParts[1];
             String year = dateParts[2];
 
-            // Get district name from location map
-            String district = locationMap.getOrDefault(cityId, "Unknown");
-
-            if (processedLines < 5) {
-                System.err.println("CityID: " + cityId + " -> District: " + district);
-            }
+            // Get district name
+            String district = locationMap.getOrDefault(locationId, "Unknown");
 
             if (district.equals("Unknown")) {
                 skippedLines++;
                 if (skippedLines <= 5) {
-                    System.err.println("SKIPPED - Unknown district for cityId: " + cityId);
+                    System.err.println("SKIPPED - Unknown location: " + locationId);
                 }
                 return;
             }
 
+            // Parse numbers
             double temperature = parseDouble(tempStr);
             double precipitation = parseDouble(precipStr);
 
@@ -150,15 +141,15 @@ public class DistrictMonthlyStatsMapper extends Mapper<LongWritable, Text, Text,
                 return;
             }
 
-            // Key: District-Year-Month
+            // Create key: District-Year-Month
             String keyStr = district + "-" + year + "-" + month;
             outputKey.set(keyStr);
 
-            // Value: temperature,precipitation
+            // Create value: temperature,precipitation
             String valueStr = temperature + "," + precipitation;
             outputValue.set(valueStr);
 
-            if (processedLines < 5) {
+            if (processedLines < 3) {
                 System.err.println("EMITTING - Key: " + keyStr + ", Value: " + valueStr);
             }
 
@@ -166,9 +157,11 @@ public class DistrictMonthlyStatsMapper extends Mapper<LongWritable, Text, Text,
             processedLines++;
 
         } catch (Exception e) {
-            System.err.println("ERROR processing line: " + line);
-            System.err.println("Exception: " + e.getMessage());
-            e.printStackTrace();
+            skippedLines++;
+            if (skippedLines <= 10) {
+                System.err.println("ERROR: " + e.getMessage());
+                e.printStackTrace();
+            }
         }
     }
 
