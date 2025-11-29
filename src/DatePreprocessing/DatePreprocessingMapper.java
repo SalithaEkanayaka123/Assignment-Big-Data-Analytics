@@ -53,16 +53,31 @@ public class DatePreprocessingMapper extends Mapper<LongWritable, Text, LongWrit
 
     private String parseDate(String input) throws Exception {
         SimpleDateFormat outputFormat = new SimpleDateFormat("dd-MM-yyyy");
+        // Try formats in order: exact matches first, then flexible formats
         String[] formats = {
-                "dd-MM-yyyy", "d-M-yyyy", "d/M/yyyy", "M/d/yyyy", 
-                "dd/MM/yyyy", "MM/dd/yyyy", "yyyy-MM-dd", "yyyy/MM/dd"
+                "dd-MM-yyyy",   // Already correct format
+                "d-M-yyyy",     // Single digit with dash
+                "yyyy-MM-dd",   // ISO format
+                "dd/MM/yyyy",   // Double digit with slash
+                "d/M/yyyy",     // Single digit with slash (1/1/2010)
+                "dd-M-yyyy",    // Mixed: double day, single month with dash
+                "d-MM-yyyy",    // Mixed: single day, double month with dash
+                "M/d/yyyy",     // US format with slash (ambiguous)
+                "MM/dd/yyyy",   // US format double digit
+                "yyyy/MM/dd",   // ISO with slash
+                "d/MM/yyyy",    // Single day, double month with slash
+                "dd/M/yyyy"     // Double day, single month with slash
         };
+        
         for (String format : formats) {
             try {
                 SimpleDateFormat sdf = new SimpleDateFormat(format);
                 sdf.setLenient(false);
                 Date date = sdf.parse(input);
-                return outputFormat.format(date);
+                // Verify that the entire string was parsed
+                if (sdf.format(date).length() > 0) {
+                    return outputFormat.format(date);
+                }
             } catch (Exception ignored) {
                 // try next format
             }
