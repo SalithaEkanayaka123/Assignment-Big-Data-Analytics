@@ -13,20 +13,14 @@ import java.util.Map;
  * Mapper Class: DistrictMonthlyStatsMapper
  *
  * PURPOSE:
- * Processes each weather record and emits key-value pairs grouping data by District-Year-Month.
- * This mapper performs a MAP-SIDE JOIN by loading location data into memory.
+ * Processes weather records and enriches them with district information using map-side join.
+ * Emits key-value pairs grouped by District-Year-Month for aggregation in the reducer phase.
  *
  * INPUT KEY: LongWritable (byte offset of line in file)
  * INPUT VALUE: Text (CSV line from weather data)
  *
  * OUTPUT KEY: Text (format: "District-Year-Month", e.g., "Mumbai-2023-07")
  * OUTPUT VALUE: Text (format: "temperature,precipitation", e.g., "28.5,45.2")
- *
- * POINTS:
- * - Uses Distributed Cache for efficient lookup of location data
- * - Implements data enrichment (adds district name to weather records)
- * - Demonstrates MapReduce data preprocessing and validation
- * - Uses setup() method to initialize resources once per mapper task
  */
 public class DistrictMonthlyStatsMapper extends Mapper<LongWritable, Text, Text, Text> {
 
@@ -45,12 +39,6 @@ public class DistrictMonthlyStatsMapper extends Mapper<LongWritable, Text, Text,
 
     /**
      * SETUP METHOD - Called once per mapper task before processing any records
-     *
-     * POINTS:
-     * - This runs ONCE per mapper, not once per record (efficient initialization)
-     * - Loads location data from Distributed Cache into memory
-     * - Creates a HashMap for fast lookups: locationId -> districtName
-     * - This is an example of MAP-SIDE JOIN optimization technique
      */
     @Override
     protected void setup(Context context) throws IOException, InterruptedException {
@@ -80,6 +68,7 @@ public class DistrictMonthlyStatsMapper extends Mapper<LongWritable, Text, Text,
                 while ((line = reader.readLine()) != null) {
                     String[] fields = line.split(",");
 
+                    //log line
                     if (locationCount < 3) {
                         System.err.println("Location line " + locationCount + ": " + line);
                         System.err.println("  Fields count: " + fields.length);
@@ -112,12 +101,12 @@ public class DistrictMonthlyStatsMapper extends Mapper<LongWritable, Text, Text,
     /**
      * MAP METHOD - Called once for each input record (each line of weather data)
      *
-     * POINTS:
-     * - This is the core mapper logic executed for every input record
-     * - Performs data validation, parsing, and transformation
-     * - Enriches weather data with district information (JOIN operation)
-     * - Emits intermediate key-value pairs for the reducer to aggregate
-     * - Implements error handling to skip malformed records
+     * PURPOSE: Processes weather records, enriches them with district information using map-side join,
+     * and emits grouped data by District-Year-Month for aggregation in the reducer phase.
+     *
+     * OUTPUT FORMAT:
+     * - Key: "District-Year-Month" (e.g., "Mumbai-2023-07")
+     * - Value: "temperature,precipitation" (e.g., "28.5,45.2")
      */
     @Override
     protected void map(LongWritable key, Text value, Context context)
@@ -126,7 +115,7 @@ public class DistrictMonthlyStatsMapper extends Mapper<LongWritable, Text, Text,
         totalLinesReceived++;
         String line = value.toString().trim();
 
-        // Detailed logging for first few records (useful for debugging)
+        // logging for first 5 records
         if (totalLinesReceived <= 5) {
             System.err.println("\n=== RAW LINE " + totalLinesReceived + " ===");
             System.err.println("Line content: [" + line.substring(0, Math.min(200, line.length())) + "]");
@@ -149,6 +138,7 @@ public class DistrictMonthlyStatsMapper extends Mapper<LongWritable, Text, Text,
         //Parse CSV line into fields
         String[] fields = line.split(",");
 
+        //logging data
         if (totalLinesReceived <= 5) {
             System.err.println("Processing line " + totalLinesReceived);
             System.err.println("Total fields: " + fields.length);
@@ -157,7 +147,6 @@ public class DistrictMonthlyStatsMapper extends Mapper<LongWritable, Text, Text,
             }
         }
 
-        // Data quality check - ensure we have all required fields
         // Need at least 12 fields (0-11) based on CSV structure
         if (fields.length < 12) {
             skippedLines++;
@@ -169,8 +158,6 @@ public class DistrictMonthlyStatsMapper extends Mapper<LongWritable, Text, Text,
         }
 
         try {
-            // Extract relevant fields from weather CSV
-            // Field indices based on CSV structure:
             String locationId = fields[0].trim();      // Location identifier
             String date = fields[1].trim();            // Date of observation
             String tempStr = fields[5].trim();         // Temperature reading
@@ -188,6 +175,9 @@ public class DistrictMonthlyStatsMapper extends Mapper<LongWritable, Text, Text,
             String[] dateParts;
             String day, month, year;
 
+            /**
+             * Date format check
+             */
             if (date.contains("-")) {
                 dateParts = date.split("-");
                 if (totalLinesReceived <= 5) {
@@ -224,16 +214,14 @@ public class DistrictMonthlyStatsMapper extends Mapper<LongWritable, Text, Text,
                 System.err.println("  Parsed date: day=" + day + ", month=" + month + ", year=" + year);
             }
 
-            // LOOKUP OPERATION - This is the JOIN step!
-            // Use locationId to find district name from our in-memory map
-            // getOrDefault returns "Unknown" if locationId not found
+            // Join operation with hashmap by taking the locationId
             String district = locationMap.getOrDefault(locationId, "Unknown");
 
             if (totalLinesReceived <= 5) {
                 System.err.println("  District lookup: " + locationId + " -> " + district);
             }
 
-            // Skip records with unknown locations (data quality)
+            // Skip records with unknown locations
             if (district.equals("Unknown")) {
                 skippedLines++;
                 if (skippedLines <= 10) {
@@ -260,15 +248,11 @@ public class DistrictMonthlyStatsMapper extends Mapper<LongWritable, Text, Text,
                 return;
             }
 
-            // BUILD COMPOSITE KEY - This determines how data will be grouped
             // Format: "District-Year-Month" (e.g., "Mumbai-2023-07")
-            // All records with same district, year, and month will go to same reducer
             String keyStr = district + "-" + year + "-" + month;
             outputKey.set(keyStr);
 
-            // BUILD VALUE - Contains the data to be aggregated
             // Format: "temperature,precipitation" (e.g., "28.5,45.2")
-            // Reducer will sum/average these values
             String valueStr = temperature + "," + precipitation;
             outputValue.set(valueStr);
 
@@ -276,9 +260,7 @@ public class DistrictMonthlyStatsMapper extends Mapper<LongWritable, Text, Text,
                 System.err.println("✓ EMITTING - Key: [" + keyStr + "], Value: [" + valueStr + "]");
             }
 
-            //EMIT KEY-VALUE PAIR - This is the mapper output
-            // context.write() sends data to the shuffle and sort phase
-            // Hadoop will automatically group all values with same key together
+            //This is the mapper output
             context.write(outputKey, outputValue);
             processedLines++;
 
@@ -293,11 +275,6 @@ public class DistrictMonthlyStatsMapper extends Mapper<LongWritable, Text, Text,
 
     /**
      * CLEANUP METHOD - Called once per mapper task after all records are processed
-     *
-     * POINTS:
-     * - Used for cleanup and logging final statistics
-     * - Runs once per mapper, useful for closing resources or reporting metrics
-     * - Helps monitor data quality and processing efficiency
      */
     @Override
     protected void cleanup(Context context) throws IOException, InterruptedException {
@@ -310,11 +287,6 @@ public class DistrictMonthlyStatsMapper extends Mapper<LongWritable, Text, Text,
 
     /**
      * HELPER METHOD - Safely parse string to double
-     *
-     * POINTS:
-     * - Handles null, empty, and invalid numeric values gracefully
-     * - Returns NaN (Not a Number) for invalid inputs instead of throwing exception
-     * - Example of defensive programming in data processing
      */
     private double parseDouble(String str) {
         try {

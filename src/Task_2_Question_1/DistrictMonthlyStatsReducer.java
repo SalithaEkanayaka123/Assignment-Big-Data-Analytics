@@ -16,12 +16,6 @@ import java.io.IOException;
  *
  * OUTPUT KEY: Text (empty string for cleaner output)
  * OUTPUT VALUE: Text (human-readable formatted statistics)
- *
- * POINTS:
- * - Reducer receives all values with the same key grouped together (by Hadoop framework)
- * - Performs aggregation operations (SUM for precipitation, AVERAGE for temperature)
- * - Demonstrates data summarization and statistical computation
- * - Produces human-readable output for business users
  */
 public class DistrictMonthlyStatsReducer extends Reducer<Text, Text, Text, Text> {
 
@@ -30,19 +24,6 @@ public class DistrictMonthlyStatsReducer extends Reducer<Text, Text, Text, Text>
 
     /**
      * REDUCE METHOD - Called once for each unique key (District-Year-Month combination)
-     *
-     * POINTS:
-     * - This is the core reducer logic that aggregates data
-     * - The 'values' parameter contains ALL mapper outputs for this specific key
-     * - Multiple mappers may have emitted values for the same key
-     * - Hadoop's shuffle and sort phase ensures all values for a key reach same reducer
-     *
-     * ALGORITHM:
-     * 1. Iterate through all values (temperature,precipitation pairs)
-     * 2. Sum all temperatures and precipitations
-     * 3. Count number of records
-     * 4. Calculate mean temperature = sum / count
-     * 5. Format and emit result
      */
     @Override
     protected void reduce(Text key, Iterable<Text> values, Context context)
@@ -57,9 +38,7 @@ public class DistrictMonthlyStatsReducer extends Reducer<Text, Text, Text, Text>
         double precipSum = 0.0;    // Sum of all precipitation values
         int count = 0;             // Number of records for this key
 
-        // AGGREGATION LOOP - Process all values for this key
-        // values is an Iterable containing all mapper outputs for this key
-        // Could be from multiple mappers processing different file splits
+        //  Process all values for this key
         for (Text value : values) {
             String[] parts = value.toString().split(",");
 
@@ -98,7 +77,6 @@ public class DistrictMonthlyStatsReducer extends Reducer<Text, Text, Text, Text>
                 String month = keyParts[2];
 
                 // FORMAT OUTPUT - Create human-readable result
-                // Business-friendly format instead of raw numbers
                 // Shows: District, Total Precipitation, Mean Temperature, Month, Year
                 String output = String.format("%s had a total precipitation of %.2f mm with a mean temperature of %.2f°C for month %s in year %s",
                         district, precipSum, meanTemp, month, year);
@@ -111,7 +89,6 @@ public class DistrictMonthlyStatsReducer extends Reducer<Text, Text, Text, Text>
                 }
 
                 // EMIT FINAL OUTPUT
-                // Key is empty string for cleaner file output (no redundant key column)
                 // Value contains the complete formatted message
                 context.write(new Text(""), outputValue);  // Empty key for cleaner output
                 keysProcessed++;
@@ -121,11 +98,6 @@ public class DistrictMonthlyStatsReducer extends Reducer<Text, Text, Text, Text>
 
     /**
      * CLEANUP METHOD - Called once per reducer task after processing all keys
-     *
-     * POINTS:
-     * - Used for final logging and resource cleanup
-     * - Reports how many unique keys (district-month combinations) were processed
-     * - Helps verify job completed successfully
      */
     @Override
     protected void cleanup(Context context) throws IOException, InterruptedException {
